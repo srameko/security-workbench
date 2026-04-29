@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="cs">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -136,7 +136,7 @@ async function callAI({ apiCfg, system, prompt }) {
   const p = apiCfg.provider;
 
   if (p === "anthropic") {
-    if (!apiCfg.anthropicKey) throw new Error("Chybí Anthropic API klíč (Nastavení → Anthropic)");
+    if (!apiCfg.anthropicKey) throw new Error("Missing Anthropic API key (Settings → Anthropic)");
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method:"POST",
       headers:{
@@ -152,7 +152,7 @@ async function callAI({ apiCfg, system, prompt }) {
     return d.content.map(b=>b.text||"").join("");
 
   } else if (p === "openai") {
-    if (!apiCfg.openaiKey) throw new Error("Chybí OpenAI API klíč (Nastavení → OpenAI)");
+    if (!apiCfg.openaiKey) throw new Error("Missing OpenAI API key (Settings → OpenAI)");
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method:"POST",
       headers:{"Content-Type":"application/json","Authorization":`Bearer ${apiCfg.openaiKey}`},
@@ -344,7 +344,7 @@ function SettingsPanel({ apiCfg, setApiCfg, onClose }) {
   return (
     <div style={{background:th.bg2,borderBottom:`1px solid ${th.border}`,padding:"18px 20px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-        <span style={{fontSize:10,color:"#ef4444",letterSpacing:"0.15em"}}>// API NASTAVENÍ</span>
+        <span style={{fontSize:10,color:"#ef4444",letterSpacing:"0.15em"}}>// API SETTINGS</span>
         <button onClick={onClose} style={{background:"transparent",border:"none",color:th.textDim,cursor:"pointer",fontSize:14}}>✕</button>
       </div>
 
@@ -403,7 +403,7 @@ function SettingsPanel({ apiCfg, setApiCfg, onClose }) {
             <input value={apiCfg.customModel} onChange={e=>setA("customModel",e.target.value)} placeholder="gemma2:27b" style={F.inp}/>
           </div>
           <div style={F.row}>
-            <span style={F.lbl}>API KEY (volitelné)</span>
+            <span style={F.lbl}>API KEY (optional)</span>
             <input type="password" value={apiCfg.customKey} onChange={e=>setA("customKey",e.target.value)} placeholder="bearer token…" style={F.inp}/>
           </div>
           <div style={{gridColumn:"1/-1",display:"flex",gap:20,flexWrap:"wrap"}}>
@@ -452,7 +452,7 @@ function IoCView({ iocText, setIocText }) {
       <div style={{flex:1,padding:22,borderRight:`1px solid ${th.border}`,display:"flex",flexDirection:"column",gap:11}}>
         <div>
           <div style={{fontSize:11,color:"#ef4444",letterSpacing:"0.15em",marginBottom:3}}>// IoC INPUT</div>
-          <div style={{fontSize:11,color:th.textDim}}>Vložte nebo pište IoC — IP, domény, hashe, URL, emaily, registry klíče…</div>
+          <div style={{fontSize:11,color:th.textDim}}>Paste or type IoCs — IPs, domains, hashes, URLs, emails, registry keys…</div>
         </div>
         <textarea
           value={iocText}
@@ -461,17 +461,17 @@ function IoCView({ iocText, setIocText }) {
           style={{...inp,flex:1,resize:"none",lineHeight:1.85,padding:14}}
         />
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:10,color:th.textDim}}>{parsedIoCs.length} IoC{parsedIoCs.length!==1?"s":""} nalezeno</span>
-          <button onClick={()=>setIocText("")} style={{marginLeft:"auto",padding:"4px 10px",fontSize:10,letterSpacing:"0.08em",background:"transparent",border:`1px solid ${th.border}`,borderRadius:3,color:th.textMuted,cursor:"pointer"}}>VYMAZAT</button>
-          <button onClick={copyAll} disabled={!parsedIoCs.length} style={{padding:"4px 12px",fontSize:10,letterSpacing:"0.08em",background:"#166534",color:"#86efac",border:"1px solid #22c55e30",borderRadius:3,cursor:"pointer"}}>⎘ KOPÍROVAT VŠE</button>
+          <span style={{fontSize:10,color:th.textDim}}>{parsedIoCs.length} IoC{parsedIoCs.length!==1?"s":""} found</span>
+          <button onClick={()=>setIocText("")} style={{marginLeft:"auto",padding:"4px 10px",fontSize:10,letterSpacing:"0.08em",background:"transparent",border:`1px solid ${th.border}`,borderRadius:3,color:th.textMuted,cursor:"pointer"}}>CLEAR</button>
+          <button onClick={copyAll} disabled={!parsedIoCs.length} style={{padding:"4px 12px",fontSize:10,letterSpacing:"0.08em",background:"#166534",color:"#86efac",border:"1px solid #22c55e30",borderRadius:3,cursor:"pointer"}}>⎘ COPY ALL</button>
         </div>
       </div>
 
       {/* Right: parsed */}
       <div style={{width:380,padding:16,overflowY:"auto"}}>
-        <div style={{fontSize:10,color:th.textDim,letterSpacing:"0.1em",marginBottom:14}}>// NALEZENÉ IoC ({parsedIoCs.length})</div>
+        <div style={{fontSize:10,color:th.textDim,letterSpacing:"0.1em",marginBottom:14}}>// PARSED IoC ({parsedIoCs.length})</div>
         {parsedIoCs.length===0&&(
-          <div style={{fontSize:11,color:th.textGhost,lineHeight:2}}>Žádné IoC nebyly rozpoznány.<br/>Vložte data do textového pole vlevo.</div>
+          <div style={{fontSize:11,color:th.textGhost,lineHeight:2}}>No IoCs detected.<br/>Paste data into the text area on the left.</div>
         )}
         {Object.entries(grouped).map(([type,{label,color,items}])=>(
           <div key={type} style={{marginBottom:18}}>
@@ -482,7 +482,7 @@ function IoCView({ iocText, setIocText }) {
             {items.map((val,i)=>(
               <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,padding:"5px 8px",background:th.bg2,border:`1px solid ${th.border}`,borderRadius:3}}>
                 <span style={{flex:1,fontSize:10,color:th.text2,fontFamily:"monospace",wordBreak:"break-all",lineHeight:1.5}}>{val}</span>
-                <button onClick={()=>copyVal(val)} title="Kopírovat" style={{flexShrink:0,padding:"2px 6px",fontSize:10,background:"transparent",border:`1px solid ${th.border}`,borderRadius:2,color:th.textMuted,cursor:"pointer"}}>⎘</button>
+                <button onClick={()=>copyVal(val)} title="Copy" style={{flexShrink:0,padding:"2px 6px",fontSize:10,background:"transparent",border:`1px solid ${th.border}`,borderRadius:2,color:th.textMuted,cursor:"pointer"}}>⎘</button>
               </div>
             ))}
           </div>
@@ -538,7 +538,7 @@ function SecBench() {
 
   const themeIcon = themePref==="system"?"◐":themePref==="dark"?"●":"○";
   const themeNext = themePref==="system"?"dark":themePref==="dark"?"light":"system";
-  const themeTitle = {system:"Systém",dark:"Tmavý",light:"Světlý"};
+  const themeTitle = {system:"System",dark:"Dark",light:"Light"};
 
   // ── Persist ──────────────────────────────────────────────────────────────────
   const setApiCfg  = v => { const n=typeof v==="function"?v(apiCfg):v; setApiCfgState(n); LS.set("sb-api",n); };
@@ -553,7 +553,7 @@ function SecBench() {
 
   // ── AI actions ───────────────────────────────────────────────────────────────
   const extractEntities = async() => {
-    setLoading(true); setLoadMsg("Extrahuji entity…"); setError(null);
+    setLoading(true); setLoadMsg("Extracting entities…"); setError(null);
     try {
       const raw = await callAI({apiCfg, system:SYS_EXTRACT, prompt:`Extract entities and relationships:\n\n${reportText}`});
       const parsed = JSON.parse(raw.replace(/```json|```/g,"").trim());
@@ -563,7 +563,7 @@ function SecBench() {
   };
 
   const generateReport = async() => {
-    setLoading(true); setLoadMsg("Generuji report…"); setError(null);
+    setLoading(true); setLoadMsg("Generating report…"); setError(null);
     try {
       const metaCtx  = `\n\nMetadata: Title="${meta.title||"Untitled"}", Analyst="${meta.analyst||"—"}", Date="${meta.date} ${meta.time}", TLP=${meta.tlp}, PAP=${meta.pap}`;
       const graphCtx = graphData ? `\n\nEntity graph:\nNodes: ${graphData.nodes.map(n=>`${n.type}:${n.label}`).join(", ")}\nEdges: ${graphData.edges.map(e=>`${e.source}→[${e.label}]→${e.target}`).join(", ")}` : "";
@@ -587,7 +587,7 @@ function SecBench() {
   const fmtTs = ts => new Date(ts).toLocaleDateString("cs-CZ",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
 
   // ── Exports ──────────────────────────────────────────────────────────────────
-  const copyReport = () => navigator.clipboard.writeText(generated).then(()=>showToast("Zkopírováno")).catch(()=>{});
+  const copyReport = () => navigator.clipboard.writeText(generated).then(()=>showToast("Copied")).catch(()=>{});
 
   const exportMarkdown = () => {
     if (!generated) return;
@@ -596,14 +596,14 @@ function SecBench() {
     a.href = URL.createObjectURL(new Blob([fm+generated],{type:"text/markdown"}));
     a.download = `${(meta.title||"ir-report").toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9-]/g,"").slice(0,40)||"ir-report"}_${meta.date}.md`;
     a.click(); URL.revokeObjectURL(a.href);
-    showToast("Exportováno jako .md");
+    showToast("Exported as .md");
   };
 
   const exportPDF = () => {
     if (!generated) return;
     const t=TLP[meta.tlp]||TLP.AMBER, p=PAP[meta.pap]||PAP.AMBER, cc=t.border;
     const win = window.open("","_blank","width=860,height=700");
-    win.document.write(`<!DOCTYPE html><html lang="cs"><head><meta charset="utf-8"><title>${meta.title||"IR Report"}</title>
+    win.document.write(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>${meta.title||"IR Report"}</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:ital,wght@0,400;0,600;0,700;1,400&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
@@ -629,7 +629,7 @@ function SecBench() {
   .hint button{padding:5px 14px;background:${cc};color:#fff;border:none;border-radius:3px;cursor:pointer}
   @media print{.hint{display:none!important}}
 </style></head><body><div class="wrap">
-<div class="hint"><span>⚠ <strong>Ctrl+P</strong> → Uložit jako PDF &nbsp;·&nbsp; A4, Background graphics ✓</span><button onclick="window.print()">🖨 PDF</button></div>
+<div class="hint"><span>⚠ <strong>Ctrl+P</strong> → Save as PDF &nbsp;·&nbsp; A4, Background graphics ✓</span><button onclick="window.print()">🖨 PDF</button></div>
 <div class="cover">
   <div class="badges">
     <span class="badge" style="background:#0f172a;color:#fff">INCIDENT RESPONSE REPORT</span>
@@ -638,15 +638,15 @@ function SecBench() {
   </div>
   <h1>${meta.title||"Security Incident Report"}</h1>
   <div class="meta-grid">
-    <span class="mk">Analytik</span><span class="mv">${meta.analyst||"—"}</span>
-    <span class="mk">Datum</span><span class="mv">${meta.date} ${meta.time}</span>
+    <span class="mk">Analyst</span><span class="mv">${meta.analyst||"—"}</span>
+    <span class="mk">Date</span><span class="mv">${meta.date} ${meta.time}</span>
   </div>
 </div>
 ${mdToHtml(generated)}
 <div class="footer"><span>SecBench · ${meta.analyst||"SecBench"}</span><span>${t.label} · ${p.label} · ${meta.date} ${meta.time}</span></div>
 </div></body></html>`);
     win.document.close();
-    showToast("PDF okno otevřeno — Ctrl+P");
+    showToast("PDF window opened — Ctrl+P");
   };
 
   const exportSession = () => {
@@ -655,7 +655,7 @@ ${mdToHtml(generated)}
     a.href = URL.createObjectURL(new Blob([JSON.stringify({version:"1.1",exportedAt:new Date().toISOString(),meta,reportText,graphData,notesList,generated,iocText},null,2)],{type:"application/json"}));
     a.download = `secbench_${slug}_${meta.date}.json`;
     a.click(); URL.revokeObjectURL(a.href);
-    showToast("Session exportována");
+    showToast("Session exported");
   };
 
   const importSession = (e) => {
@@ -670,8 +670,8 @@ ${mdToHtml(generated)}
         if (s.notesList)        saveNotes(s.notesList);
         if (s.generated)        setGenerated(s.generated);
         if (s.iocText!=null)    setIocText(s.iocText);
-        setView("report"); showToast(`Načteno: ${file.name}`);
-      } catch { showToast("Chyba: neplatný soubor","err"); }
+        setView("report"); showToast(`Loaded: ${file.name}`);
+      } catch { showToast("Error: invalid file","err"); }
     };
     r.readAsText(file); e.target.value="";
   };
@@ -683,8 +683,8 @@ ${mdToHtml(generated)}
 
   const NAV = [
     {id:"report", icon:"◧", label:"REPORT"},
-    {id:"graph",  icon:"◈", label:"GRAF",     disabled:!graphData},
-    {id:"notes",  icon:"◉", label:"POZNÁMKY"},
+    {id:"graph",  icon:"◈", label:"GRAPH",   disabled:!graphData},
+    {id:"notes",  icon:"◉", label:"NOTES"},
     {id:"ioc",    icon:"◌", label:"IoC"},
     {id:"export", icon:"▣", label:"IR REPORT", disabled:!generated},
   ];
@@ -733,7 +733,7 @@ ${mdToHtml(generated)}
           {/* Theme toggle */}
           <button
             onClick={()=>setThemePref(themeNext)}
-            title={`Téma: ${themeTitle[themePref]} → přepnout`}
+            title={`Theme: ${themeTitle[themePref]} — click to switch`}
             style={{display:"flex",alignItems:"center",gap:5,padding:"3px 10px",fontSize:10,
               background:"transparent",color:th.textMuted,border:`1px solid ${th.border}`,borderRadius:3,cursor:"pointer"}}>
             <span style={{fontSize:12}}>{themeIcon}</span>
@@ -782,16 +782,16 @@ ${mdToHtml(generated)}
             <div style={{marginBottom:14}}>
               <div style={{fontSize:11,color:"#ef4444",letterSpacing:"0.15em",marginBottom:3}}>// INPUT</div>
               <div style={{fontSize:18,color:th.text,marginBottom:2}}>Security Report</div>
-              <div style={{fontSize:11,color:th.textDim}}>IR report, malware analýza, log summary</div>
+              <div style={{fontSize:11,color:th.textDim}}>IR report, malware analysis, log summary</div>
             </div>
 
             <div style={{background:th.bg2,border:`1px solid ${th.border}`,borderRadius:4,padding:"14px 16px",marginBottom:14}}>
               <div style={{fontSize:10,color:th.textDim,letterSpacing:"0.12em",marginBottom:12}}>// METADATA</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 20px",marginBottom:14}}>
-                <div><div style={S.lbl}>NÁZEV / CASE ID</div><input value={meta.title} onChange={e=>setM("title",e.target.value)} placeholder="Incident 2024-03 — Ransomware" style={S.inp}/></div>
-                <div><div style={S.lbl}>ANALYTIK</div><input value={meta.analyst} onChange={e=>setM("analyst",e.target.value)} placeholder="Jméno analytika" style={S.inp}/></div>
+                <div><div style={S.lbl}>TITLE / CASE ID</div><input value={meta.title} onChange={e=>setM("title",e.target.value)} placeholder="Incident 2024-03 — Ransomware" style={S.inp}/></div>
+                <div><div style={S.lbl}>ANALYST</div><input value={meta.analyst} onChange={e=>setM("analyst",e.target.value)} placeholder="Analyst name" style={S.inp}/></div>
                 <div><div style={S.lbl}>DATUM</div><input type="date" value={meta.date} onChange={e=>setM("date",e.target.value)} style={S.inp}/></div>
-                <div><div style={S.lbl}>ČAS</div><input type="time" value={meta.time} onChange={e=>setM("time",e.target.value)} style={S.inp}/></div>
+                <div><div style={S.lbl}>TIME</div><input type="time" value={meta.time} onChange={e=>setM("time",e.target.value)} style={S.inp}/></div>
               </div>
               <div style={{display:"flex",gap:24,flexWrap:"wrap"}}>
                 <ClassPicker label="TLP" options={["WHITE","GREEN","AMBER","RED"]} value={meta.tlp} onChange={v=>setM("tlp",v)} colorMap={TLP}/>
@@ -805,11 +805,11 @@ ${mdToHtml(generated)}
             <div style={{marginTop:12,display:"flex",gap:8,flexWrap:"wrap"}}>
               <button onClick={extractEntities} disabled={loading||!reportText.trim()} style={{...S.btn("primary"),display:"flex",alignItems:"center",gap:7}}>
                 {loading&&loadMsg.includes("entit")&&<span style={{animation:"spin 1s linear infinite",display:"inline-block"}}>◈</span>}
-                {loading&&loadMsg.includes("entit")?loadMsg:"◈ EXTRAHOVAT → GRAF"}
+                {loading&&loadMsg.includes("entit")?loadMsg:"◈ EXTRACT → GRAPH"}
               </button>
               <button onClick={generateReport} disabled={loading||!reportText.trim()} style={{...S.btn("secondary"),display:"flex",alignItems:"center",gap:7}}>
                 {loading&&loadMsg.includes("report")&&<span style={{animation:"spin 1s linear infinite",display:"inline-block"}}>▣</span>}
-                {loading&&loadMsg.includes("report")?loadMsg:"▣ GENEROVAT IR REPORT"}
+                {loading&&loadMsg.includes("report")?loadMsg:"▣ GENERATE IR REPORT"}
               </button>
             </div>
           </div>
@@ -820,7 +820,7 @@ ${mdToHtml(generated)}
           <div style={{width:"100%",height:"calc(100vh - 46px)"}}>
             {graphData
               ? <GraphView graphData={graphData} selected={selected} setSelected={setSelected}/>
-              : <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:th.textDim,fontSize:12}}>Nejprve analyzujte report</div>
+              : <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:th.textDim,fontSize:12}}>Analyze a report first</div>
             }
           </div>
         )}
@@ -829,25 +829,25 @@ ${mdToHtml(generated)}
         {view==="notes"&&(
           <div style={{display:"flex",height:"calc(100vh - 46px)"}}>
             <div style={{flex:1,padding:22,borderRight:`1px solid ${th.border}`,display:"flex",flexDirection:"column",gap:11}}>
-              <div style={{fontSize:11,color:"#ef4444",letterSpacing:"0.15em"}}>{editIdx!==null?"// EDITOVAT":"// NOVÁ POZNÁMKA"}</div>
-              <div><div style={S.lbl}>NÁZEV</div><input value={curNote.title} onChange={e=>setCurNote(p=>({...p,title:e.target.value}))} placeholder="Název…" style={S.inp}/></div>
+              <div style={{fontSize:11,color:"#ef4444",letterSpacing:"0.15em"}}>{editIdx!==null?"// EDIT NOTE":"// NEW NOTE"}</div>
+              <div><div style={S.lbl}>TITLE</div><input value={curNote.title} onChange={e=>setCurNote(p=>({...p,title:e.target.value}))} placeholder="Title…" style={S.inp}/></div>
               <div style={{flex:1,display:"flex",flexDirection:"column"}}>
-                <div style={S.lbl}>OBSAH</div>
+                <div style={S.lbl}>CONTENT</div>
                 <textarea value={curNote.body} onChange={e=>setCurNote(p=>({...p,body:e.target.value}))} placeholder={"IOC:\nTimeline:\nActions taken:"} style={{...S.inp,flex:1,resize:"none",lineHeight:1.7,padding:14}}/>
               </div>
               <div style={{display:"flex",gap:8}}>
-                <button onClick={saveNote} disabled={!curNote.title&&!curNote.body} style={S.btn("primary")}>{editIdx!==null?"ULOŽIT":"PŘIDAT"}</button>
-                {editIdx!==null&&<button onClick={()=>{setEditIdx(null);setCurNote({title:"",body:""});}} style={S.btn("ghost")}>ZRUŠIT</button>}
+                <button onClick={saveNote} disabled={!curNote.title&&!curNote.body} style={S.btn("primary")}>{editIdx!==null?"SAVE":"ADD"}</button>
+                {editIdx!==null&&<button onClick={()=>{setEditIdx(null);setCurNote({title:"",body:""});}} style={S.btn("ghost")}>CANCEL</button>}
               </div>
             </div>
             <div style={{width:290,padding:16,overflowY:"auto"}}>
-              <div style={{fontSize:10,color:th.textDim,letterSpacing:"0.1em",marginBottom:12}}>// POZNÁMKY ({notesList.length})</div>
-              {notesList.length===0&&<div style={{fontSize:11,color:th.textGhost,lineHeight:2}}>Žádné poznámky.</div>}
+              <div style={{fontSize:10,color:th.textDim,letterSpacing:"0.1em",marginBottom:12}}>// NOTES ({notesList.length})</div>
+              {notesList.length===0&&<div style={{fontSize:11,color:th.textGhost,lineHeight:2}}>No notes yet.</div>}
               {[...notesList].reverse().map((n,ri)=>{
                 const idx=notesList.length-1-ri;
                 return (
                   <div key={n.id||idx} style={{marginBottom:9,padding:12,background:th.bg2,border:`1px solid ${th.border}`,borderRadius:4}}>
-                    <div style={{fontSize:11,color:th.text,marginBottom:4}}>{n.title||"(bez názvu)"}</div>
+                    <div style={{fontSize:11,color:th.text,marginBottom:4}}>{n.title||"(untitled)"}</div>
                     <div style={{fontSize:10,color:th.textDim,marginBottom:8,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{n.body.length>90?n.body.slice(0,88)+"…":n.body}</div>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                       <span style={{fontSize:9,color:th.border2}}>{n.ts?fmtTs(n.ts):""}</span>
@@ -884,7 +884,7 @@ ${mdToHtml(generated)}
                 </div>
               </div>
               <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}>
-                <button onClick={copyReport}     style={S.btn("secondary")}>⎘ KOPÍROVAT</button>
+                <button onClick={copyReport}     style={S.btn("secondary")}>⎘ COPY</button>
                 <button onClick={exportMarkdown} style={S.btn("green")}>↓ MARKDOWN</button>
                 <button onClick={exportPDF}      style={S.btn("purple")}>↓ PDF</button>
                 <div style={{width:1,height:18,background:th.border}}/>
@@ -897,7 +897,7 @@ ${mdToHtml(generated)}
             {generated
               ? <div style={{background:th.bg2,border:`1px solid ${th.border}`,borderRadius:4,padding:"18px 20px"}}><MdRender text={generated}/></div>
               : <div style={{padding:40,textAlign:"center",color:th.textGhost,fontSize:12}}>
-                  Report nebyl vygenerován.<br/>
+                  Report not generated yet.<br/>
                   <button onClick={generateReport} style={{...S.btn("primary"),marginTop:14}}>GENEROVAT</button>
                 </div>
             }
