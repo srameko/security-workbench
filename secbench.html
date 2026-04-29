@@ -10,13 +10,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body,#root{height:100%;background:#080c18}
+  html,body,#root{height:100%}
   ::-webkit-scrollbar{width:4px}
-  ::-webkit-scrollbar-track{background:#05080f}
-  ::-webkit-scrollbar-thumb{background:#1e2d4a}
   @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
   @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-  textarea:focus,input:focus,select:focus{border-color:#1e3a5f!important;outline:none}
   button:hover:not(:disabled){opacity:.82}
   button:disabled{cursor:not-allowed;opacity:.4}
 </style>
@@ -24,9 +21,56 @@
 <body>
 <div id="root"></div>
 <script type="text/babel" data-presets="react">
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } = React;
 
-// ─── Constants ─────────────────────────────────────────────────────────────────
+// ─── Theme ──────────────────────────────────────────────────────────────────────
+const THEME_DARK = {
+  bg:"#080c18", bg2:"#05080f",
+  border:"#0f1a2e", border2:"#1e2d4a", borderFocus:"#1e3a5f",
+  text:"#e2e8f0", text2:"#94a3b8", textMuted:"#4b5563", textDim:"#374151", textGhost:"#1e2d4a",
+  inputBg:"#05080f", errBg:"#2d0a0a", errBorder:"#ef444430",
+  accent2:"#1e3a5f",
+  linkColor:"#1e2d4a", arrowColor:"#374151", linkLabel:"#4b5563", nodeLabel:"#94a3b8",
+  legendBg:"#06091480", popupBg:"#06091490", graphHint:"#374151",
+};
+const THEME_LIGHT = {
+  bg:"#f8fafc", bg2:"#f1f5f9",
+  border:"#e2e8f0", border2:"#cbd5e1", borderFocus:"#94a3b8",
+  text:"#0f172a", text2:"#475569", textMuted:"#64748b", textDim:"#94a3b8", textGhost:"#cbd5e1",
+  inputBg:"#ffffff", errBg:"#fef2f2", errBorder:"#dc262630",
+  accent2:"#2563eb",
+  linkColor:"#cbd5e1", arrowColor:"#94a3b8", linkLabel:"#94a3b8", nodeLabel:"#64748b",
+  legendBg:"rgba(248,250,252,0.88)", popupBg:"rgba(241,245,249,0.92)", graphHint:"#94a3b8",
+};
+const ThemeCtx = createContext(THEME_DARK);
+const useTheme = () => useContext(ThemeCtx);
+
+// ─── IoC ────────────────────────────────────────────────────────────────────────
+const IOC_PATTERNS = [
+  {type:"sha256", label:"SHA256",   color:"#ec4899", re:/\b[a-fA-F0-9]{64}\b/g},
+  {type:"sha1",   label:"SHA1",     color:"#f472b6", re:/\b[a-fA-F0-9]{40}\b/g},
+  {type:"md5",    label:"MD5",      color:"#fb7185", re:/\b[a-fA-F0-9]{32}\b/g},
+  {type:"ip",     label:"IP",       color:"#ef4444", re:/\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g},
+  {type:"url",    label:"URL",      color:"#f97316", re:/(?:hxxps?|https?):\/\/[^\s<>"'\]]+/gi},
+  {type:"domain", label:"Domain",   color:"#fb923c", re:/\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+(?:com|net|org|ru|io|cc|info|biz|xyz|top|de|uk|fr|eu|us|cn|gov|mil|edu)\b/gi},
+  {type:"email",  label:"Email",    color:"#eab308", re:/\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b/gi},
+  {type:"registry",label:"Registry",color:"#14b8a6", re:/HK(?:LM|CU|CR|U|CC)\\[^\s,;\n"]+/gi},
+  {type:"filepath",label:"FilePath",color:"#a78bfa", re:/[A-Za-z]:\\[^\s,;\n"<>|]+/g},
+];
+
+function parseIoCs(text) {
+  if (!text.trim()) return [];
+  const seen = new Map();
+  for (const pat of IOC_PATTERNS) {
+    const matches = text.match(new RegExp(pat.re.source, pat.re.flags)) || [];
+    for (const m of matches) {
+      if (!seen.has(m.toLowerCase())) seen.set(m.toLowerCase(), {value:m, type:pat.type, color:pat.color, label:pat.label});
+    }
+  }
+  return [...seen.values()];
+}
+
+// ─── Constants ──────────────────────────────────────────────────────────────────
 const E_COLOR = {ip:"#ef4444",domain:"#f97316",hostname:"#eab308",process:"#22c55e",user:"#3b82f6",file:"#a78bfa",hash:"#ec4899",registry:"#14b8a6",port:"#f59e0b",unknown:"#6b7280"};
 const E_ICON  = {ip:"⬡",domain:"◎",hostname:"▣",process:"▶",user:"◉",file:"◧",hash:"◈",registry:"◫",port:"◌",unknown:"◦"};
 
@@ -46,10 +90,10 @@ const PAP = {
 const DEFAULT_META = {title:"",analyst:"",date:new Date().toISOString().slice(0,10),time:new Date().toTimeString().slice(0,5),tlp:"AMBER",pap:"AMBER"};
 
 const DEFAULT_API = {
-  provider: "anthropic",
-  anthropicKey: "", anthropicModel: "claude-sonnet-4-20250514",
-  openaiKey: "",    openaiModel: "gpt-4o",
-  customUrl: "http://localhost", customPort: "11434", customModel: "gemma2:27b", customKey: "",
+  provider:"anthropic",
+  anthropicKey:"", anthropicModel:"claude-sonnet-4-20250514",
+  openaiKey:"",    openaiModel:"gpt-4o",
+  customUrl:"http://localhost", customPort:"11434", customModel:"gemma2:27b", customKey:"",
 };
 
 const ANTHROPIC_MODELS = ["claude-sonnet-4-20250514","claude-opus-4-5","claude-haiku-4-5-20251001"];
@@ -118,7 +162,7 @@ async function callAI({ apiCfg, system, prompt }) {
     const d = await r.json();
     return d.choices[0].message.content;
 
-  } else { // custom
+  } else {
     const base = apiCfg.customUrl.replace(/\/+$/,"");
     const port = apiCfg.customPort ? `:${apiCfg.customPort}` : "";
     const url  = `${base}${port}/v1/chat/completions`;
@@ -150,6 +194,7 @@ function mdToHtml(md) {
 
 // ─── Graph ──────────────────────────────────────────────────────────────────────
 function GraphView({ graphData, selected, setSelected }) {
+  const th = useTheme();
   const svgRef = useRef(null);
   const simRef = useRef(null);
 
@@ -177,11 +222,11 @@ function GraphView({ graphData, selected, setSelected }) {
 
     svg.append("defs").append("marker").attr("id","arr").attr("viewBox","0 -5 10 10")
       .attr("refX",30).attr("refY",0).attr("markerWidth",5).attr("markerHeight",5).attr("orient","auto")
-      .append("path").attr("d","M0,-5L10,0L0,5").attr("fill","#374151");
+      .append("path").attr("d","M0,-5L10,0L0,5").attr("fill",th.arrowColor);
 
     const lG = g.append("g").selectAll("g").data(edges).enter().append("g");
-    lG.append("line").attr("stroke","#1e2d4a").attr("stroke-width",1.5).attr("marker-end","url(#arr)");
-    lG.append("text").text(d=>d.label).attr("text-anchor","middle").attr("font-size","9px").attr("fill","#4b5563").attr("font-family","monospace");
+    lG.append("line").attr("stroke",th.linkColor).attr("stroke-width",1.5).attr("marker-end","url(#arr)");
+    lG.append("text").text(d=>d.label).attr("text-anchor","middle").attr("font-size","9px").attr("fill",th.linkLabel).attr("font-family","monospace");
 
     const nG = g.append("g").selectAll("g").data(nodes).enter().append("g").style("cursor","pointer")
       .call(d3.drag()
@@ -198,14 +243,14 @@ function GraphView({ graphData, selected, setSelected }) {
       .attr("text-anchor","middle").attr("dominant-baseline","central").attr("font-size","15px")
       .attr("fill",d=>E_COLOR[d.type]||E_COLOR.unknown);
     nG.append("text").text(d=>d.label.length>16?d.label.slice(0,14)+"…":d.label)
-      .attr("text-anchor","middle").attr("dy",38).attr("font-size","10px").attr("fill","#94a3b8").attr("font-family","monospace");
+      .attr("text-anchor","middle").attr("dy",38).attr("font-size","10px").attr("fill",th.nodeLabel).attr("font-family","monospace");
 
     sim.on("tick",()=>{
       lG.select("line").attr("x1",d=>d.source.x).attr("y1",d=>d.source.y).attr("x2",d=>d.target.x).attr("y2",d=>d.target.y);
       lG.select("text").attr("x",d=>(d.source.x+d.target.x)/2).attr("y",d=>(d.source.y+d.target.y)/2-7);
       nG.attr("transform",d=>`translate(${d.x},${d.y})`);
     });
-  },[graphData,setSelected]);
+  },[graphData, setSelected, th]);
 
   useEffect(()=>{const t=setTimeout(render,60);return()=>clearTimeout(t);},[render]);
   useEffect(()=>{const h=()=>render();window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[render]);
@@ -214,7 +259,7 @@ function GraphView({ graphData, selected, setSelected }) {
   return (
     <div style={{position:"relative",width:"100%",height:"100%"}}>
       <svg ref={svgRef} style={{width:"100%",height:"100%"}}/>
-      <div style={{position:"absolute",top:16,left:16,background:"#06091480",backdropFilter:"blur(8px)",border:"1px solid #1e2d4a",borderRadius:4,padding:"10px 14px"}}>
+      <div style={{position:"absolute",top:16,left:16,background:th.legendBg,backdropFilter:"blur(8px)",border:`1px solid ${th.border2}`,borderRadius:4,padding:"10px 14px"}}>
         {legendTypes.map(t=>(
           <div key={t} style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,fontSize:10,fontFamily:"monospace"}}>
             <span style={{color:E_COLOR[t]||E_COLOR.unknown,fontSize:12}}>{E_ICON[t]||E_ICON.unknown}</span>
@@ -223,29 +268,30 @@ function GraphView({ graphData, selected, setSelected }) {
         ))}
       </div>
       {selected&&(
-        <div style={{position:"absolute",top:16,right:16,width:220,background:"#06091490",backdropFilter:"blur(10px)",border:`1px solid ${E_COLOR[selected.type]||"#374151"}`,borderRadius:4,padding:14}}>
+        <div style={{position:"absolute",top:16,right:16,width:220,background:th.popupBg,backdropFilter:"blur(10px)",border:`1px solid ${E_COLOR[selected.type]||th.border2}`,borderRadius:4,padding:14}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
             <span style={{color:E_COLOR[selected.type],fontSize:18}}>{E_ICON[selected.type]}</span>
-            <span style={{fontSize:11,color:"#e2e8f0",fontFamily:"monospace",wordBreak:"break-all"}}>{selected.label}</span>
+            <span style={{fontSize:11,color:th.text,fontFamily:"monospace",wordBreak:"break-all"}}>{selected.label}</span>
           </div>
           <div style={{fontSize:10,color:E_COLOR[selected.type],marginBottom:6,letterSpacing:"0.1em"}}>{selected.type.toUpperCase()}</div>
-          <div style={{fontSize:10,color:"#6b7280",fontFamily:"monospace",lineHeight:1.6}}>{selected.details}</div>
+          <div style={{fontSize:10,color:th.textMuted,fontFamily:"monospace",lineHeight:1.6}}>{selected.details}</div>
         </div>
       )}
-      <div style={{position:"absolute",bottom:12,right:16,fontSize:9,color:"#374151",fontFamily:"monospace"}}>scroll to zoom · drag to pan · click for detail</div>
+      <div style={{position:"absolute",bottom:12,right:16,fontSize:9,color:th.graphHint,fontFamily:"monospace"}}>scroll to zoom · drag to pan · click for detail</div>
     </div>
   );
 }
 
 // ─── MdRender ──────────────────────────────────────────────────────────────────
 function MdRender({ text }) {
+  const th = useTheme();
   return (
-    <div style={{fontSize:12,lineHeight:1.85,color:"#94a3b8",fontFamily:"monospace"}}>
+    <div style={{fontSize:12,lineHeight:1.85,color:th.text2,fontFamily:"monospace"}}>
       {text.split("\n").map((line,i)=>{
-        if (line.startsWith("## "))  return <div key={i} style={{color:"#ef4444",fontSize:13,letterSpacing:"0.1em",marginTop:20,marginBottom:6,borderBottom:"1px solid #0f1a2e",paddingBottom:4}}>{line.slice(3)}</div>;
+        if (line.startsWith("## "))  return <div key={i} style={{color:"#ef4444",fontSize:13,letterSpacing:"0.1em",marginTop:20,marginBottom:6,borderBottom:`1px solid ${th.border}`,paddingBottom:4}}>{line.slice(3)}</div>;
         if (line.startsWith("### ")) return <div key={i} style={{color:"#3b82f6",fontSize:11,letterSpacing:"0.1em",marginTop:12}}>▸ {line.slice(4)}</div>;
         if (line.startsWith("- ")||line.startsWith("* ")) return <div key={i} style={{paddingLeft:12}}>◦ {line.slice(2)}</div>;
-        if (/^\*\*(.+)\*\*$/.test(line)) return <div key={i} style={{color:"#e2e8f0"}}>{line.replace(/\*\*/g,"")}</div>;
+        if (/^\*\*(.+)\*\*$/.test(line)) return <div key={i} style={{color:th.text}}>{line.replace(/\*\*/g,"")}</div>;
         return <div key={i}>{line}</div>;
       })}
     </div>
@@ -254,9 +300,10 @@ function MdRender({ text }) {
 
 // ─── ClassPicker ──────────────────────────────────────────────────────────────
 function ClassPicker({ label, options, value, onChange, colorMap }) {
+  const th = useTheme();
   return (
     <div style={{display:"flex",alignItems:"center",gap:6}}>
-      <span style={{fontSize:9,color:"#374151",letterSpacing:"0.1em"}}>{label}</span>
+      <span style={{fontSize:9,color:th.textDim,letterSpacing:"0.1em"}}>{label}</span>
       <div style={{display:"flex",gap:3}}>
         {options.map(opt=>{
           const oc=colorMap[opt], active=value===opt;
@@ -275,32 +322,32 @@ function ClassPicker({ label, options, value, onChange, colorMap }) {
 
 // ─── Settings Panel ────────────────────────────────────────────────────────────
 function SettingsPanel({ apiCfg, setApiCfg, onClose }) {
+  const th = useTheme();
   const p = apiCfg.provider;
   const setA = (k,v) => setApiCfg(c=>({...c,[k]:v}));
 
-  const F = { // field styles
+  const F = {
     row:   {display:"flex",flexDirection:"column",gap:4},
-    lbl:   {fontSize:9,color:"#374151",letterSpacing:"0.12em"},
-    inp:   {background:"#080c18",border:"1px solid #0f1a2e",borderRadius:3,color:"#94a3b8",fontFamily:"monospace",fontSize:11,padding:"6px 10px",width:"100%"},
-    sel:   {background:"#080c18",border:"1px solid #0f1a2e",borderRadius:3,color:"#94a3b8",fontFamily:"monospace",fontSize:11,padding:"6px 10px",width:"100%"},
-    hint:  {fontSize:9,color:"#1e3a5f",lineHeight:1.6,marginTop:4},
+    lbl:   {fontSize:9,color:th.textDim,letterSpacing:"0.12em"},
+    inp:   {background:th.inputBg,border:`1px solid ${th.border}`,borderRadius:3,color:th.text2,fontFamily:"monospace",fontSize:11,padding:"6px 10px",width:"100%"},
+    sel:   {background:th.inputBg,border:`1px solid ${th.border}`,borderRadius:3,color:th.text2,fontFamily:"monospace",fontSize:11,padding:"6px 10px",width:"100%"},
+    hint:  {fontSize:9,color:th.borderFocus,lineHeight:1.6,marginTop:4},
     badge: (active,color) => ({
       padding:"4px 14px",fontSize:10,letterSpacing:"0.1em",borderRadius:3,cursor:"pointer",border:"none",
-      background:active?color+"22":"transparent",color:active?color:"#374151",
-      outline:`1px solid ${active?color+"50":"#0f1a2e"}`,
+      background:active?color+"22":"transparent",color:active?color:th.textDim,
+      outline:`1px solid ${active?color+"50":th.border}`,
     }),
   };
 
   const PROVIDER_COLORS = {anthropic:"#ef4444",openai:"#22c55e",custom:"#a78bfa"};
 
   return (
-    <div style={{background:"#05080f",borderBottom:"1px solid #0f1a2e",padding:"18px 20px"}}>
+    <div style={{background:th.bg2,borderBottom:`1px solid ${th.border}`,padding:"18px 20px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
         <span style={{fontSize:10,color:"#ef4444",letterSpacing:"0.15em"}}>// API NASTAVENÍ</span>
-        <button onClick={onClose} style={{background:"transparent",border:"none",color:"#374151",cursor:"pointer",fontSize:14}}>✕</button>
+        <button onClick={onClose} style={{background:"transparent",border:"none",color:th.textDim,cursor:"pointer",fontSize:14}}>✕</button>
       </div>
 
-      {/* Provider selector */}
       <div style={{display:"flex",gap:6,marginBottom:18}}>
         {[["anthropic","Anthropic"],["openai","OpenAI"],["custom","Custom / Local"]].map(([id,lbl])=>(
           <button key={id} onClick={()=>setA("provider",id)} style={F.badge(p===id, PROVIDER_COLORS[id])}>
@@ -309,7 +356,6 @@ function SettingsPanel({ apiCfg, setApiCfg, onClose }) {
         ))}
       </div>
 
-      {/* Anthropic */}
       {p==="anthropic"&&(
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px 20px"}}>
           <div style={F.row}>
@@ -326,7 +372,6 @@ function SettingsPanel({ apiCfg, setApiCfg, onClose }) {
         </div>
       )}
 
-      {/* OpenAI */}
       {p==="openai"&&(
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px 20px"}}>
           <div style={F.row}>
@@ -343,7 +388,6 @@ function SettingsPanel({ apiCfg, setApiCfg, onClose }) {
         </div>
       )}
 
-      {/* Custom */}
       {p==="custom"&&(
         <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr 1fr",gap:"12px 14px"}}>
           <div style={F.row}>
@@ -364,16 +408,16 @@ function SettingsPanel({ apiCfg, setApiCfg, onClose }) {
           </div>
           <div style={{gridColumn:"1/-1",display:"flex",gap:20,flexWrap:"wrap"}}>
             {[
-              ["Ollama",     "http://localhost","11434",""],
-              ["LM Studio",  "http://localhost","1234", ""],
-              ["vLLM",       "http://localhost","8000", ""],
-            ].map(([name,url,port,note])=>(
+              ["Ollama","http://localhost","11434"],
+              ["LM Studio","http://localhost","1234"],
+              ["vLLM","http://localhost","8000"],
+            ].map(([name,url,port])=>(
               <button key={name} onClick={()=>setApiCfg(c=>({...c,customUrl:url,customPort:port}))}
-                style={{padding:"3px 10px",fontSize:9,letterSpacing:"0.08em",background:"transparent",border:"1px solid #0f1a2e",borderRadius:3,color:"#4b5563",cursor:"pointer"}}>
-                ⬡ {name} {note}
+                style={{padding:"3px 10px",fontSize:9,letterSpacing:"0.08em",background:"transparent",border:`1px solid ${th.border}`,borderRadius:3,color:th.textMuted,cursor:"pointer"}}>
+                ⬡ {name}
               </button>
             ))}
-            <span style={F.hint}>Výsledný endpoint: {apiCfg.customUrl}{apiCfg.customPort?`:${apiCfg.customPort}`:""}/v1/chat/completions</span>
+            <span style={F.hint}>Endpoint: {apiCfg.customUrl}{apiCfg.customPort?`:${apiCfg.customPort}`:""}/v1/chat/completions</span>
           </div>
         </div>
       )}
@@ -381,36 +425,133 @@ function SettingsPanel({ apiCfg, setApiCfg, onClose }) {
   );
 }
 
+// ─── IoCView ───────────────────────────────────────────────────────────────────
+function IoCView({ iocText, setIocText }) {
+  const th = useTheme();
+  const parsedIoCs = useMemo(() => parseIoCs(iocText), [iocText]);
+  const grouped = useMemo(() => {
+    const g = {};
+    for (const ioc of parsedIoCs) {
+      if (!g[ioc.type]) g[ioc.type] = {label:ioc.label, color:ioc.color, items:[]};
+      g[ioc.type].items.push(ioc.value);
+    }
+    return g;
+  }, [parsedIoCs]);
+
+  const copyVal = v => navigator.clipboard.writeText(v).catch(()=>{});
+  const copyAll = () => {
+    const lines = parsedIoCs.map(i=>`[${i.label}] ${i.value}`).join("\n");
+    navigator.clipboard.writeText(lines).catch(()=>{});
+  };
+
+  const inp = {width:"100%",background:th.inputBg,border:`1px solid ${th.border}`,borderRadius:3,color:th.text2,fontFamily:"monospace",fontSize:12,padding:"8px 12px",boxSizing:"border-box"};
+
+  return (
+    <div style={{display:"flex",height:"calc(100vh - 46px)"}}>
+      {/* Left: input */}
+      <div style={{flex:1,padding:22,borderRight:`1px solid ${th.border}`,display:"flex",flexDirection:"column",gap:11}}>
+        <div>
+          <div style={{fontSize:11,color:"#ef4444",letterSpacing:"0.15em",marginBottom:3}}>// IoC INPUT</div>
+          <div style={{fontSize:11,color:th.textDim}}>Vložte nebo pište IoC — IP, domény, hashe, URL, emaily, registry klíče…</div>
+        </div>
+        <textarea
+          value={iocText}
+          onChange={e=>setIocText(e.target.value)}
+          placeholder={"185.220.101.47\nmalicious-c2.ru\nd41d8cd98f00b204e9800998ecf8427e\nhxxps://evil.ru/payload.exe\nHKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\nC:\\Users\\user\\AppData\\Local\\Temp\\stage2.exe"}
+          style={{...inp,flex:1,resize:"none",lineHeight:1.85,padding:14}}
+        />
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:10,color:th.textDim}}>{parsedIoCs.length} IoC{parsedIoCs.length!==1?"s":""} nalezeno</span>
+          <button onClick={()=>setIocText("")} style={{marginLeft:"auto",padding:"4px 10px",fontSize:10,letterSpacing:"0.08em",background:"transparent",border:`1px solid ${th.border}`,borderRadius:3,color:th.textMuted,cursor:"pointer"}}>VYMAZAT</button>
+          <button onClick={copyAll} disabled={!parsedIoCs.length} style={{padding:"4px 12px",fontSize:10,letterSpacing:"0.08em",background:"#166534",color:"#86efac",border:"1px solid #22c55e30",borderRadius:3,cursor:"pointer"}}>⎘ KOPÍROVAT VŠE</button>
+        </div>
+      </div>
+
+      {/* Right: parsed */}
+      <div style={{width:380,padding:16,overflowY:"auto"}}>
+        <div style={{fontSize:10,color:th.textDim,letterSpacing:"0.1em",marginBottom:14}}>// NALEZENÉ IoC ({parsedIoCs.length})</div>
+        {parsedIoCs.length===0&&(
+          <div style={{fontSize:11,color:th.textGhost,lineHeight:2}}>Žádné IoC nebyly rozpoznány.<br/>Vložte data do textového pole vlevo.</div>
+        )}
+        {Object.entries(grouped).map(([type,{label,color,items}])=>(
+          <div key={type} style={{marginBottom:18}}>
+            <div style={{fontSize:9,color,letterSpacing:"0.14em",marginBottom:7,textTransform:"uppercase",display:"flex",alignItems:"center",gap:6}}>
+              <span style={{display:"inline-block",width:6,height:6,borderRadius:"50%",background:color}}/>
+              {label} ({items.length})
+            </div>
+            {items.map((val,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,padding:"5px 8px",background:th.bg2,border:`1px solid ${th.border}`,borderRadius:3}}>
+                <span style={{flex:1,fontSize:10,color:th.text2,fontFamily:"monospace",wordBreak:"break-all",lineHeight:1.5}}>{val}</span>
+                <button onClick={()=>copyVal(val)} title="Kopírovat" style={{flexShrink:0,padding:"2px 6px",fontSize:10,background:"transparent",border:`1px solid ${th.border}`,borderRadius:2,color:th.textMuted,cursor:"pointer"}}>⎘</button>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────────
 function SecBench() {
-  const [view, setView]           = useState("report");
+  const [view, setView]              = useState("report");
   const [showSettings, setShowSettings] = useState(false);
-  const [apiCfg, setApiCfgState]  = useState(() => ({...DEFAULT_API, ...LS.get("sb-api",{})}));
-  const [reportText, setReportText] = useState(() => LS.get("sb-report", SAMPLE));
-  const [graphData, setGraphData] = useState(() => LS.get("sb-graph", null));
-  const [notesList, setNotesList] = useState(() => LS.get("sb-notes", []));
-  const [curNote, setCurNote]     = useState({title:"",body:""});
-  const [editIdx, setEditIdx]     = useState(null);
-  const [generated, setGenerated] = useState(() => LS.get("sb-generated", ""));
-  const [meta, setMeta]           = useState(() => ({...DEFAULT_META,...LS.get("sb-meta",{})}));
-  const [loading, setLoading]     = useState(false);
-  const [loadMsg, setLoadMsg]     = useState("");
-  const [error, setError]         = useState(null);
-  const [selected, setSelected]   = useState(null);
-  const [toast, setToast]         = useState(null);
-  const importRef                  = useRef(null);
+  const [apiCfg, setApiCfgState]     = useState(() => ({...DEFAULT_API, ...LS.get("sb-api",{})}));
+  const [reportText, setReportText]  = useState(() => LS.get("sb-report", SAMPLE));
+  const [graphData, setGraphData]    = useState(() => LS.get("sb-graph", null));
+  const [notesList, setNotesList]    = useState(() => LS.get("sb-notes", []));
+  const [curNote, setCurNote]        = useState({title:"",body:""});
+  const [editIdx, setEditIdx]        = useState(null);
+  const [generated, setGenerated]    = useState(() => LS.get("sb-generated", ""));
+  const [meta, setMeta]              = useState(() => ({...DEFAULT_META,...LS.get("sb-meta",{})}));
+  const [iocText, setIocTextState]   = useState(() => LS.get("sb-iocs", ""));
+  const [loading, setLoading]        = useState(false);
+  const [loadMsg, setLoadMsg]        = useState("");
+  const [error, setError]            = useState(null);
+  const [selected, setSelected]      = useState(null);
+  const [toast, setToast]            = useState(null);
+  const importRef                    = useRef(null);
+
+  // ── Theme ────────────────────────────────────────────────────────────────────
+  const [themePref, setThemePrefState] = useState(() => LS.get("sb-theme","system"));
+  const [sysDark, setSysDark] = useState(() => window.matchMedia?.("(prefers-color-scheme:dark)").matches ?? true);
+  useEffect(()=>{
+    const mq = window.matchMedia("(prefers-color-scheme:dark)");
+    const h = e => setSysDark(e.matches);
+    mq.addEventListener("change",h);
+    return ()=>mq.removeEventListener("change",h);
+  },[]);
+  const setThemePref = v => { setThemePrefState(v); LS.set("sb-theme",v); };
+  const isDark = themePref==="dark" || (themePref==="system" && sysDark);
+  const th = isDark ? THEME_DARK : THEME_LIGHT;
+
+  useEffect(()=>{
+    let s = document.getElementById("sb-dyn");
+    if (!s) { s=document.createElement("style"); s.id="sb-dyn"; document.head.appendChild(s); }
+    s.textContent = `
+      html,body,#root{background:${th.bg}}
+      ::-webkit-scrollbar-track{background:${th.bg}}
+      ::-webkit-scrollbar-thumb{background:${th.border2}}
+      textarea:focus,input:focus,select:focus{border-color:${th.borderFocus}!important;outline:none}
+    `;
+  },[th]);
+
+  const themeIcon = themePref==="system"?"◐":themePref==="dark"?"●":"○";
+  const themeNext = themePref==="system"?"dark":themePref==="dark"?"light":"system";
+  const themeTitle = {system:"Systém",dark:"Tmavý",light:"Světlý"};
+
+  // ── Persist ──────────────────────────────────────────────────────────────────
+  const setApiCfg  = v => { const n=typeof v==="function"?v(apiCfg):v; setApiCfgState(n); LS.set("sb-api",n); };
+  const setM       = (k,v) => setMeta(p=>{const n={...p,[k]:v}; LS.set("sb-meta",n); return n;});
+  const saveNotes  = list => { setNotesList(list); LS.set("sb-notes",list); };
+  const setIocText = v => { setIocTextState(v); LS.set("sb-iocs",v); };
+  useEffect(()=>{const t=setTimeout(()=>LS.set("sb-report",reportText),800);return()=>clearTimeout(t);},[reportText]);
+  useEffect(()=>{if(graphData) LS.set("sb-graph",graphData);},[graphData]);
+  useEffect(()=>{if(generated) LS.set("sb-generated",generated);},[generated]);
 
   const showToast = (msg,type="ok") => { setToast({msg,type}); setTimeout(()=>setToast(null),2800); };
 
-  // ── Persist to localStorage ────────────────────────────────────────────────
-  const setApiCfg = (v) => { const next=typeof v==="function"?v(apiCfg):v; setApiCfgState(next); LS.set("sb-api",next); };
-  const setM = (k,v) => setMeta(p=>{const n={...p,[k]:v}; LS.set("sb-meta",n); return n;});
-  const saveNotes = (list) => { setNotesList(list); LS.set("sb-notes",list); };
-  useEffect(()=>{ const t=setTimeout(()=>LS.set("sb-report",reportText),800); return()=>clearTimeout(t); },[reportText]);
-  useEffect(()=>{ if(graphData) LS.set("sb-graph",graphData); },[graphData]);
-  useEffect(()=>{ if(generated) LS.set("sb-generated",generated); },[generated]);
-
-  // ── Extract entities ─────────────────────────────────────────────────────────
+  // ── AI actions ───────────────────────────────────────────────────────────────
   const extractEntities = async() => {
     setLoading(true); setLoadMsg("Extrahuji entity…"); setError(null);
     try {
@@ -421,14 +562,14 @@ function SecBench() {
     finally { setLoading(false); }
   };
 
-  // ── Generate report ──────────────────────────────────────────────────────────
   const generateReport = async() => {
     setLoading(true); setLoadMsg("Generuji report…"); setError(null);
     try {
-      const metaCtx = `\n\nMetadata: Title="${meta.title||"Untitled"}", Analyst="${meta.analyst||"—"}", Date="${meta.date} ${meta.time}", TLP=${meta.tlp}, PAP=${meta.pap}`;
+      const metaCtx  = `\n\nMetadata: Title="${meta.title||"Untitled"}", Analyst="${meta.analyst||"—"}", Date="${meta.date} ${meta.time}", TLP=${meta.tlp}, PAP=${meta.pap}`;
       const graphCtx = graphData ? `\n\nEntity graph:\nNodes: ${graphData.nodes.map(n=>`${n.type}:${n.label}`).join(", ")}\nEdges: ${graphData.edges.map(e=>`${e.source}→[${e.label}]→${e.target}`).join(", ")}` : "";
       const notesCtx = notesList.length ? `\n\nAnalyst notes:\n${notesList.map(n=>`[${n.title}]\n${n.body}`).join("\n\n")}` : "";
-      const raw = await callAI({apiCfg, system:SYS_REPORT, prompt:`Source report:\n${reportText}${metaCtx}${graphCtx}${notesCtx}\n\nWrite the IR report now.`});
+      const iocCtx   = iocText.trim() ? `\n\nManual IoCs:\n${iocText}` : "";
+      const raw = await callAI({apiCfg, system:SYS_REPORT, prompt:`Source report:\n${reportText}${metaCtx}${graphCtx}${notesCtx}${iocCtx}\n\nWrite the IR report now.`});
       setGenerated(raw); setView("export");
     } catch(e) { setError(e.message); }
     finally { setLoading(false); }
@@ -511,7 +652,7 @@ ${mdToHtml(generated)}
   const exportSession = () => {
     const slug = (meta.title||"session").toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9-]/g,"").slice(0,30)||"session";
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([JSON.stringify({version:"1.0",exportedAt:new Date().toISOString(),meta,reportText,graphData,notesList,generated},null,2)],{type:"application/json"}));
+    a.href = URL.createObjectURL(new Blob([JSON.stringify({version:"1.1",exportedAt:new Date().toISOString(),meta,reportText,graphData,notesList,generated,iocText},null,2)],{type:"application/json"}));
     a.download = `secbench_${slug}_${meta.date}.json`;
     a.click(); URL.revokeObjectURL(a.href);
     showToast("Session exportována");
@@ -523,11 +664,12 @@ ${mdToHtml(generated)}
     r.onload = ev => {
       try {
         const s = JSON.parse(ev.target.result);
-        if (s.meta)         { setMeta({...DEFAULT_META,...s.meta}); LS.set("sb-meta",{...DEFAULT_META,...s.meta}); }
+        if (s.meta)             { setMeta({...DEFAULT_META,...s.meta}); LS.set("sb-meta",{...DEFAULT_META,...s.meta}); }
         if (s.reportText!=null) setReportText(s.reportText);
-        if (s.graphData)    setGraphData(s.graphData);
-        if (s.notesList)    saveNotes(s.notesList);
-        if (s.generated)    setGenerated(s.generated);
+        if (s.graphData)        setGraphData(s.graphData);
+        if (s.notesList)        saveNotes(s.notesList);
+        if (s.generated)        setGenerated(s.generated);
+        if (s.iocText!=null)    setIocText(s.iocText);
         setView("report"); showToast(`Načteno: ${file.name}`);
       } catch { showToast("Chyba: neplatný soubor","err"); }
     };
@@ -540,35 +682,39 @@ ${mdToHtml(generated)}
   const pc = PROVIDER_COLOR[apiCfg.provider]||"#6b7280";
 
   const NAV = [
-    {id:"report",icon:"◧",label:"REPORT"},
-    {id:"graph", icon:"◈",label:"GRAF",    disabled:!graphData},
-    {id:"notes", icon:"◉",label:"POZNÁMKY"},
-    {id:"export",icon:"▣",label:"IR REPORT",disabled:!generated},
+    {id:"report", icon:"◧", label:"REPORT"},
+    {id:"graph",  icon:"◈", label:"GRAF",     disabled:!graphData},
+    {id:"notes",  icon:"◉", label:"POZNÁMKY"},
+    {id:"ioc",    icon:"◌", label:"IoC"},
+    {id:"export", icon:"▣", label:"IR REPORT", disabled:!generated},
   ];
+
   const S = {
-    app:   {background:"#080c18",height:"100vh",color:"#e2e8f0",fontFamily:"'JetBrains Mono','Fira Code','Cascadia Code',monospace",display:"flex",flexDirection:"column"},
-    top:   {borderBottom:"1px solid #0f1a2e",padding:"0 16px",display:"flex",alignItems:"center",background:"#05080f",height:46,flexShrink:0},
+    app:   {background:th.bg,height:"100vh",color:th.text,fontFamily:"'JetBrains Mono','Fira Code','Cascadia Code',monospace",display:"flex",flexDirection:"column"},
+    top:   {borderBottom:`1px solid ${th.border}`,padding:"0 16px",display:"flex",alignItems:"center",background:th.bg2,height:46,flexShrink:0},
     ct:    {flex:1,overflow:"hidden",position:"relative"},
     panel: {padding:24,height:"100%",boxSizing:"border-box",overflowY:"auto"},
-    lbl:   {fontSize:10,color:"#374151",letterSpacing:"0.12em",marginBottom:6},
-    inp:   {width:"100%",background:"#05080f",border:"1px solid #0f1a2e",borderRadius:3,color:"#94a3b8",fontFamily:"monospace",fontSize:12,padding:"8px 12px",boxSizing:"border-box"},
-    btn: v =>({padding:"8px 16px",fontSize:11,letterSpacing:"0.1em",borderRadius:3,cursor:"pointer",
-               background:v==="primary"?"#ef4444":v==="green"?"#166534":v==="purple"?"#3b0764":v==="ghost"?"transparent":"#0f1a2e",
-               color:v==="primary"?"#fff":v==="green"?"#86efac":v==="purple"?"#c4b5fd":v==="ghost"?"#4b5563":"#94a3b8",
-               border:v==="ghost"?"1px solid #0f1a2e":v==="green"?"1px solid #22c55e30":v==="purple"?"1px solid #a78bfa30":"none"}),
+    lbl:   {fontSize:10,color:th.textDim,letterSpacing:"0.12em",marginBottom:6},
+    inp:   {width:"100%",background:th.inputBg,border:`1px solid ${th.border}`,borderRadius:3,color:th.text2,fontFamily:"monospace",fontSize:12,padding:"8px 12px",boxSizing:"border-box"},
+    btn: v=>({padding:"8px 16px",fontSize:11,letterSpacing:"0.1em",borderRadius:3,cursor:"pointer",
+              background:v==="primary"?"#ef4444":v==="green"?"#166534":v==="purple"?"#3b0764":v==="ghost"?"transparent":th.border,
+              color:v==="primary"?"#fff":v==="green"?"#86efac":v==="purple"?"#c4b5fd":v==="ghost"?th.textMuted:th.text2,
+              border:v==="ghost"?`1px solid ${th.border}`:v==="green"?"1px solid #22c55e30":v==="purple"?"1px solid #a78bfa30":"none"}),
     navBtn:(a,d)=>({padding:"0 15px",height:46,border:"none",background:"transparent",
-      color:d?"#1e2d4a":a?"#ef4444":"#4b5563",borderBottom:a?"2px solid #ef4444":"2px solid transparent",
+      color:d?th.border2:a?"#ef4444":th.textMuted,borderBottom:a?"2px solid #ef4444":"2px solid transparent",
       fontSize:11,letterSpacing:"0.1em",cursor:d?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:6}),
-    err: {padding:"8px 14px",background:"#2d0a0a",border:"1px solid #ef444430",borderRadius:3,color:"#ef4444",fontSize:11,marginTop:10},
+    err: {padding:"8px 14px",background:th.errBg,border:`1px solid ${th.errBorder}`,borderRadius:3,color:"#ef4444",fontSize:11,marginTop:10},
   };
 
   return (
+    <ThemeCtx.Provider value={th}>
     <div style={S.app}>
+
       {/* ── Topbar ── */}
       <div style={S.top}>
         <div style={{display:"flex",alignItems:"center",gap:5,marginRight:22}}>
           <span style={{color:"#ef4444",fontSize:14}}>◈</span>
-          <span style={{fontSize:11,color:"#1e3a5f",letterSpacing:"0.15em"}}>SEC</span>
+          <span style={{fontSize:11,color:th.accent2,letterSpacing:"0.15em"}}>SEC</span>
           <span style={{fontSize:11,color:"#ef4444",letterSpacing:"0.15em"}}>BENCH</span>
         </div>
 
@@ -582,20 +728,32 @@ ${mdToHtml(generated)}
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>
           <button onClick={exportSession} style={{...S.btn("ghost"),padding:"3px 10px",fontSize:10}}>↓ SESSION</button>
           <button onClick={()=>importRef.current?.click()} style={{...S.btn("ghost"),padding:"3px 10px",fontSize:10}}>↑ IMPORT</button>
-          <div style={{width:1,height:18,background:"#0f1a2e",margin:"0 4px"}}/>
-          {/* API indicator + settings toggle */}
+          <div style={{width:1,height:18,background:th.border,margin:"0 4px"}}/>
+
+          {/* Theme toggle */}
+          <button
+            onClick={()=>setThemePref(themeNext)}
+            title={`Téma: ${themeTitle[themePref]} → přepnout`}
+            style={{display:"flex",alignItems:"center",gap:5,padding:"3px 10px",fontSize:10,
+              background:"transparent",color:th.textMuted,border:`1px solid ${th.border}`,borderRadius:3,cursor:"pointer"}}>
+            <span style={{fontSize:12}}>{themeIcon}</span>
+            <span style={{fontSize:9,letterSpacing:"0.08em"}}>{themeTitle[themePref].toUpperCase()}</span>
+          </button>
+          <div style={{width:1,height:18,background:th.border,margin:"0 4px"}}/>
+
+          {/* API indicator */}
           <button onClick={()=>setShowSettings(v=>!v)} style={{
             display:"flex",alignItems:"center",gap:6,padding:"3px 10px",fontSize:10,
-            background:showSettings?"#0f1a2e":"transparent",
-            color:showSettings?pc:"#374151",
-            border:`1px solid ${showSettings?pc+"50":"#0f1a2e"}`,borderRadius:3,cursor:"pointer",
+            background:showSettings?th.border:"transparent",
+            color:showSettings?pc:th.textDim,
+            border:`1px solid ${showSettings?pc+"50":th.border}`,borderRadius:3,cursor:"pointer",
           }}>
             <span style={{color:pc,fontSize:9}}>●</span>
             {PROVIDER_LABEL[apiCfg.provider]}
             {apiCfg.provider==="anthropic"&&<span style={{fontSize:9,color:apiCfg.anthropicKey?"#22c55e":"#f59e0b"}}>{apiCfg.anthropicKey?"✓":"⚠"}</span>}
             {apiCfg.provider==="openai"&&<span style={{fontSize:9,color:apiCfg.openaiKey?"#22c55e":"#f59e0b"}}>{apiCfg.openaiKey?"✓":"⚠"}</span>}
             {apiCfg.provider==="custom"&&<span style={{fontSize:9,color:"#a78bfa"}}>:{apiCfg.customPort}</span>}
-            <span style={{fontSize:10,color:"#374151"}}>⚙</span>
+            <span style={{fontSize:10,color:th.textDim}}>⚙</span>
           </button>
         </div>
       </div>
@@ -608,27 +766,27 @@ ${mdToHtml(generated)}
       {/* ── Toast ── */}
       {toast&&(
         <div style={{position:"fixed",bottom:20,right:20,zIndex:999,padding:"9px 16px",borderRadius:4,fontSize:11,
-          background:toast.type==="err"?"#2d0a0a":"#05080f",
+          background:toast.type==="err"?th.errBg:th.bg2,
           border:`1px solid ${toast.type==="err"?"#ef444450":"#22c55e50"}`,
           color:toast.type==="err"?"#ef4444":"#22c55e",
-          boxShadow:"0 4px 24px #00000090",animation:"fadeIn .2s ease"}}>
+          boxShadow:"0 4px 24px #00000040",animation:"fadeIn .2s ease"}}>
           {toast.type==="err"?"⚠ ":"✓ "}{toast.msg}
         </div>
       )}
 
       <div style={S.ct}>
+
         {/* ── REPORT ── */}
         {view==="report"&&(
           <div style={{...S.panel,maxWidth:840,margin:"0 auto"}}>
             <div style={{marginBottom:14}}>
               <div style={{fontSize:11,color:"#ef4444",letterSpacing:"0.15em",marginBottom:3}}>// INPUT</div>
-              <div style={{fontSize:18,color:"#e2e8f0",marginBottom:2}}>Security Report</div>
-              <div style={{fontSize:11,color:"#374151"}}>IR report, malware analýza, log summary</div>
+              <div style={{fontSize:18,color:th.text,marginBottom:2}}>Security Report</div>
+              <div style={{fontSize:11,color:th.textDim}}>IR report, malware analýza, log summary</div>
             </div>
 
-            {/* Metadata */}
-            <div style={{background:"#05080f",border:"1px solid #0f1a2e",borderRadius:4,padding:"14px 16px",marginBottom:14}}>
-              <div style={{fontSize:10,color:"#374151",letterSpacing:"0.12em",marginBottom:12}}>// METADATA</div>
+            <div style={{background:th.bg2,border:`1px solid ${th.border}`,borderRadius:4,padding:"14px 16px",marginBottom:14}}>
+              <div style={{fontSize:10,color:th.textDim,letterSpacing:"0.12em",marginBottom:12}}>// METADATA</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 20px",marginBottom:14}}>
                 <div><div style={S.lbl}>NÁZEV / CASE ID</div><input value={meta.title} onChange={e=>setM("title",e.target.value)} placeholder="Incident 2024-03 — Ransomware" style={S.inp}/></div>
                 <div><div style={S.lbl}>ANALYTIK</div><input value={meta.analyst} onChange={e=>setM("analyst",e.target.value)} placeholder="Jméno analytika" style={S.inp}/></div>
@@ -662,7 +820,7 @@ ${mdToHtml(generated)}
           <div style={{width:"100%",height:"calc(100vh - 46px)"}}>
             {graphData
               ? <GraphView graphData={graphData} selected={selected} setSelected={setSelected}/>
-              : <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:"#374151",fontSize:12}}>Nejprve analyzujte report</div>
+              : <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:th.textDim,fontSize:12}}>Nejprve analyzujte report</div>
             }
           </div>
         )}
@@ -670,7 +828,7 @@ ${mdToHtml(generated)}
         {/* ── NOTES ── */}
         {view==="notes"&&(
           <div style={{display:"flex",height:"calc(100vh - 46px)"}}>
-            <div style={{flex:1,padding:22,borderRight:"1px solid #0f1a2e",display:"flex",flexDirection:"column",gap:11}}>
+            <div style={{flex:1,padding:22,borderRight:`1px solid ${th.border}`,display:"flex",flexDirection:"column",gap:11}}>
               <div style={{fontSize:11,color:"#ef4444",letterSpacing:"0.15em"}}>{editIdx!==null?"// EDITOVAT":"// NOVÁ POZNÁMKA"}</div>
               <div><div style={S.lbl}>NÁZEV</div><input value={curNote.title} onChange={e=>setCurNote(p=>({...p,title:e.target.value}))} placeholder="Název…" style={S.inp}/></div>
               <div style={{flex:1,display:"flex",flexDirection:"column"}}>
@@ -683,16 +841,16 @@ ${mdToHtml(generated)}
               </div>
             </div>
             <div style={{width:290,padding:16,overflowY:"auto"}}>
-              <div style={{fontSize:10,color:"#374151",letterSpacing:"0.1em",marginBottom:12}}>// POZNÁMKY ({notesList.length})</div>
-              {notesList.length===0&&<div style={{fontSize:11,color:"#1e2d4a",lineHeight:2}}>Žádné poznámky.</div>}
+              <div style={{fontSize:10,color:th.textDim,letterSpacing:"0.1em",marginBottom:12}}>// POZNÁMKY ({notesList.length})</div>
+              {notesList.length===0&&<div style={{fontSize:11,color:th.textGhost,lineHeight:2}}>Žádné poznámky.</div>}
               {[...notesList].reverse().map((n,ri)=>{
                 const idx=notesList.length-1-ri;
                 return (
-                  <div key={n.id||idx} style={{marginBottom:9,padding:12,background:"#05080f",border:"1px solid #0f1a2e",borderRadius:4}}>
-                    <div style={{fontSize:11,color:"#e2e8f0",marginBottom:4}}>{n.title||"(bez názvu)"}</div>
-                    <div style={{fontSize:10,color:"#374151",marginBottom:8,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{n.body.length>90?n.body.slice(0,88)+"…":n.body}</div>
+                  <div key={n.id||idx} style={{marginBottom:9,padding:12,background:th.bg2,border:`1px solid ${th.border}`,borderRadius:4}}>
+                    <div style={{fontSize:11,color:th.text,marginBottom:4}}>{n.title||"(bez názvu)"}</div>
+                    <div style={{fontSize:10,color:th.textDim,marginBottom:8,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{n.body.length>90?n.body.slice(0,88)+"…":n.body}</div>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                      <span style={{fontSize:9,color:"#1e2d4a"}}>{n.ts?fmtTs(n.ts):""}</span>
+                      <span style={{fontSize:9,color:th.border2}}>{n.ts?fmtTs(n.ts):""}</span>
                       <div style={{display:"flex",gap:5}}>
                         <button onClick={()=>editNote(idx)} style={{...S.btn("ghost"),padding:"2px 7px",fontSize:9}}>EDIT</button>
                         <button onClick={()=>deleteNote(idx)} style={{...S.btn("ghost"),padding:"2px 7px",fontSize:9,color:"#ef4444",border:"1px solid #ef444420"}}>✕</button>
@@ -705,26 +863,31 @@ ${mdToHtml(generated)}
           </div>
         )}
 
+        {/* ── IoC ── */}
+        {view==="ioc"&&(
+          <IoCView iocText={iocText} setIocText={setIocText}/>
+        )}
+
         {/* ── EXPORT ── */}
         {view==="export"&&(
           <div style={{...S.panel,maxWidth:880,margin:"0 auto"}}>
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:10}}>
               <div>
                 <div style={{fontSize:11,color:"#ef4444",letterSpacing:"0.15em",marginBottom:3}}>// OUTPUT</div>
-                <div style={{fontSize:18,color:"#e2e8f0"}}>{meta.title||"IR Report"}</div>
+                <div style={{fontSize:18,color:th.text}}>{meta.title||"IR Report"}</div>
                 <div style={{display:"flex",gap:6,marginTop:6,flexWrap:"wrap"}}>
                   {[TLP[meta.tlp],PAP[meta.pap]].filter(Boolean).map((c,i)=>(
                     <span key={i} style={{fontSize:9,padding:"2px 8px",borderRadius:2,letterSpacing:"0.1em",fontWeight:600,background:c.border,color:"#fff"}}>{c.label}</span>
                   ))}
-                  {meta.analyst&&<span style={{fontSize:9,padding:"2px 8px",borderRadius:2,background:"#0f1a2e",color:"#94a3b8",border:"1px solid #1e2d4a"}}>◉ {meta.analyst}</span>}
-                  {meta.date&&<span style={{fontSize:9,padding:"2px 8px",borderRadius:2,background:"#0f1a2e",color:"#94a3b8",border:"1px solid #1e2d4a"}}>◷ {meta.date} {meta.time}</span>}
+                  {meta.analyst&&<span style={{fontSize:9,padding:"2px 8px",borderRadius:2,background:th.border,color:th.text2,border:`1px solid ${th.border2}`}}>◉ {meta.analyst}</span>}
+                  {meta.date&&<span style={{fontSize:9,padding:"2px 8px",borderRadius:2,background:th.border,color:th.text2,border:`1px solid ${th.border2}`}}>◷ {meta.date} {meta.time}</span>}
                 </div>
               </div>
               <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}>
                 <button onClick={copyReport}     style={S.btn("secondary")}>⎘ KOPÍROVAT</button>
                 <button onClick={exportMarkdown} style={S.btn("green")}>↓ MARKDOWN</button>
                 <button onClick={exportPDF}      style={S.btn("purple")}>↓ PDF</button>
-                <div style={{width:1,height:18,background:"#0f1a2e"}}/>
+                <div style={{width:1,height:18,background:th.border}}/>
                 <button onClick={generateReport} disabled={loading} style={{...S.btn("ghost"),display:"flex",alignItems:"center",gap:6,fontSize:11}}>
                   {loading?<span style={{animation:"spin 1s linear infinite",display:"inline-block"}}>◈</span>:"↻"} REGEN
                 </button>
@@ -732,16 +895,18 @@ ${mdToHtml(generated)}
             </div>
             {error&&<div style={S.err}>⚠ {error}</div>}
             {generated
-              ? <div style={{background:"#05080f",border:"1px solid #0f1a2e",borderRadius:4,padding:"18px 20px"}}><MdRender text={generated}/></div>
-              : <div style={{padding:40,textAlign:"center",color:"#1e2d4a",fontSize:12}}>
+              ? <div style={{background:th.bg2,border:`1px solid ${th.border}`,borderRadius:4,padding:"18px 20px"}}><MdRender text={generated}/></div>
+              : <div style={{padding:40,textAlign:"center",color:th.textGhost,fontSize:12}}>
                   Report nebyl vygenerován.<br/>
                   <button onClick={generateReport} style={{...S.btn("primary"),marginTop:14}}>GENEROVAT</button>
                 </div>
             }
           </div>
         )}
+
       </div>
     </div>
+    </ThemeCtx.Provider>
   );
 }
 
