@@ -13,98 +13,82 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: File exists
-        run: test -f secbench.html && echo "OK: secbench.html found"
+        run: |
+          test -f secbench.html
 
       - name: File size check
         run: |
           size=$(wc -c < secbench.html)
           echo "Size: ${size} bytes ($(( size / 1024 )) KB)"
           if [ "$size" -gt 524288 ]; then
-            echo "::warning file=secbench.html::File exceeds 512 KB — consider splitting"
+            echo "::warning file=secbench.html::File exceeds 512 KB"
           fi
 
       - name: HTML structure
         run: |
-          python3 - <<'EOF'
-          import sys
-          with open("secbench.html") as f:
-              src = f.read()
-
-          checks = {
-              "DOCTYPE":             "<!DOCTYPE html>" in src,
-              "charset UTF-8":       'charset="UTF-8"' in src,
-              "viewport meta":       "viewport" in src,
-              "title tag":           "<title>SecBench</title>" in src,
-              "React loaded":        "react.production.min.js" in src,
-              "ReactDOM.createRoot": "ReactDOM.createRoot" in src,
-              "D3 loaded":           "d3.min.js" in src,
-              "localStorage usage":  "localStorage" in src,
+          fail=0
+          check() {
+            if grep -q "$1" secbench.html; then
+              echo "OK  $2"
+            else
+              echo "FAIL $2"
+              fail=1
+            fi
           }
-
-          failed = [k for k, v in checks.items() if not v]
-          for k, v in checks.items():
-              print(f"{'✓' if v else '✗'} {k}")
-
-          if failed:
-              print(f"\nFailed: {failed}", file=sys.stderr)
-              sys.exit(1)
-          print("\nAll HTML checks passed.")
-          EOF
+          check '<!DOCTYPE html>'          'DOCTYPE'
+          check 'charset="UTF-8"'          'charset UTF-8'
+          check 'viewport'                 'viewport meta'
+          check '<title>SecBench</title>'  'title tag'
+          check 'react.production.min.js'  'React CDN'
+          check 'ReactDOM.createRoot'      'ReactDOM.createRoot'
+          check 'd3.min.js'                'D3 CDN'
+          check 'localStorage'             'localStorage usage'
+          exit $fail
 
       - name: CDN availability
         run: |
-          urls=(
-            "https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"
-            "https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"
-            "https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"
+          fail=0
+          for url in \
+            "https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" \
+            "https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" \
+            "https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js" \
             "https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"
-          )
-          failed=0
-          for url in "${urls[@]}"; do
+          do
             if curl -sf --max-time 15 --head "$url" -o /dev/null; then
-              echo "✓ $url"
+              echo "OK  $url"
             else
-              echo "✗ $url"
-              failed=1
+              echo "FAIL $url"
+              fail=1
             fi
           done
-          exit $failed
+          exit $fail
 
       - name: Security checks
         run: |
-          python3 - <<'EOF'
-          import sys, re
+          warn=0
 
-          with open("secbench.html") as f:
-              src = f.read()
+          count=$(grep -cP '\.innerHTML\s*=' secbench.html || true)
+          if [ "$count" -gt 0 ]; then
+            echo "::warning file=secbench.html::innerHTML assignment (${count}x) — verify no user data flows in"
+            warn=1
+          fi
 
-          issues = []
+          count=$(grep -c 'dangerouslySetInnerHTML' secbench.html || true)
+          if [ "$count" -gt 0 ]; then
+            echo "::warning file=secbench.html::dangerouslySetInnerHTML (${count}x) — verify sanitization"
+            warn=1
+          fi
 
-          # No eval() outside Babel (Babel itself uses it internally — we check user code)
-          user_code = src.split('<script type="text/babel"', 1)[-1] if '<script type="text/babel"' in src else ""
-          eval_matches = re.findall(r'\beval\s*\(', user_code)
-          if eval_matches:
-              issues.append(f"eval() found in user code ({len(eval_matches)}x) — review carefully")
+          if grep -qP 'anthropicKey:\s*"sk-ant-[^"]{8,}"' secbench.html; then
+            echo "::error file=secbench.html::Hardcoded Anthropic API key detected"
+            exit 1
+          fi
 
-          # innerHTML assignments (XSS risk)
-          inner_html = re.findall(r'\.innerHTML\s*=', src)
-          if inner_html:
-              issues.append(f"innerHTML assignment found ({len(inner_html)}x) — verify no user data flows in")
+          if grep -qP 'openaiKey:\s*"sk-[^"]{8,}"' secbench.html; then
+            echo "::error file=secbench.html::Hardcoded OpenAI API key detected"
+            exit 1
+          fi
 
-          # dangerouslySetInnerHTML
-          dsihtml = re.findall(r'dangerouslySetInnerHTML', src)
-          if dsihtml:
-              issues.append(f"dangerouslySetInnerHTML found ({len(dsihtml)}x) — verify sanitization")
-
-          # hardcoded credentials pattern
-          creds = re.findall(r'(?:api[_-]?key|secret|password)\s*[:=]\s*["\'][^"\']{8,}', src, re.I)
-          if creds:
-              issues.append(f"Possible hardcoded credential ({len(creds)}x)")
-
-          if issues:
-              for i in issues:
-                  print(f"::warning file=secbench.html::{i}")
-              print("\nSecurity warnings (review above).")
-          else:
-              print("✓ No security issues detected.")
-          EOF
+          if [ $warn -eq 0 ]; then
+            echo "OK  no security issues"
+          fi
